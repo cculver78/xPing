@@ -18,10 +18,19 @@ from PyQt6.QtWidgets import (
     QTextEdit, QComboBox, QMessageBox, QGroupBox, QFormLayout, QFileDialog, QLabel
 )
 
-SCRIPT_DIR = Path(__file__).resolve().parent
-CLI_PATH = SCRIPT_DIR / "xping.py"
+# Handle both PyInstaller and normal source execution
+if getattr(sys, "frozen", False):
+    BASE_DIR = Path(sys.executable).parent  # e.g. ~/xPing when installed
+else:
+    BASE_DIR = Path(__file__).resolve().parent
 
-VERSION = "1.0.0"
+# Prefer the compiled CLI binary; fall back to source script
+CLI_BIN = BASE_DIR / "xping"            # compiled CLI
+CLI_PY  = BASE_DIR / "xping.py"         # source CLI
+
+
+VERSION = "1.0.1"
+# 1.0.1 Determine which executable to use for running the CLI in compiled (pyinstaller) mode
 
 def which_python() -> str:
     # Use the current interpreter to avoid venv surprises
@@ -126,20 +135,41 @@ class XPingGUI(QWidget):
         self.idle_timer = QTimer(self); self.idle_timer.setInterval(1000); self.idle_timer.timeout.connect(lambda: None)
 
     def start(self):
-        if not CLI_PATH.exists():
-            QMessageBox.critical(self, "Error", f"CLI not found:\n{CLI_PATH}")
-            return
-        hosts = [h.strip() for h in self.hosts_edit.toPlainText().splitlines() if h.strip()]
-        if not hosts:
-            # Fallback to CLI defaults
-            hosts = []
+        # Determine which CLI we can run
+        program_frozen = getattr(sys, "frozen", False)
+        cli_program = None
 
+        if program_frozen:
+            # Prefer compiled CLI in the same directory as the GUI
+            if CLI_BIN.exists():
+                cli_program = str(CLI_BIN)
+            elif CLI_PY.exists():
+                cli_program = str(CLI_PY)
+        else:
+            # Dev mode: prefer source file, fall back to compiled binary
+            if CLI_PY.exists():
+                cli_program = str(CLI_PY)
+            elif CLI_BIN.exists():
+                cli_program = str(CLI_BIN)
+
+        if not cli_program:
+            QMessageBox.critical(self, "Error",
+                                 f"CLI not found:\n{CLI_BIN}\n{CLI_PY}")
+            return
+
+        # Guard: ensure we are not pointing at the GUI itself
+        gui_names = {"xping-gui", "xping_gui", Path(sys.executable).name}
+        if Path(cli_program).name in gui_names:
+            QMessageBox.critical(self, "Error",
+                                 "Resolved CLI points to the GUI binary. Expected 'xping' or 'xping.py'.")
+            return
+
+        hosts = [h.strip() for h in self.hosts_edit.toPlainText().splitlines() if h.strip()]
         # Hide export button for a new session
         self.export_btn.setVisible(False)
 
-        # Build args
-        args = [
-            str(CLI_PATH),
+        # Build CLI args (without the program itself)
+        cli_args = [
             "--json",
             "--interval", str(self.interval.value()),
             "--loss-window", str(self.losswin.value()),
@@ -147,13 +177,13 @@ class XPingGUI(QWidget):
             "--timeout-ms", str(self.timeout.value()),
         ]
         if self.beep.isChecked():
-            args.append("--beep")
+            cli_args.append("--beep")
         if hosts:
-            args.extend(["--hosts"] + hosts)
+            cli_args.extend(["--hosts"] + hosts)
 
         # Reset per-host counters for GUI beeps
         self.last_seen_len.clear()
-        
+
         # Reset table
         self.table.setRowCount(0)
         self.host_rows.clear()
@@ -165,10 +195,19 @@ class XPingGUI(QWidget):
         self.proc.errorOccurred.connect(self.proc_error)
         self.proc.finished.connect(self.proc_finished)
 
-        py = which_python()
-        self.proc.start(py, args)
+        if program_frozen:
+            # Run compiled CLI directly (or the .py if that's what exists)
+            self.proc.start(cli_program, cli_args)
+            program_display = cli_program
+        else:
+            # Dev mode: run via current interpreter
+            python_exe = sys.executable or "python3"
+            argv = [cli_program] + cli_args
+            self.proc.start(python_exe, argv)
+            program_display = f"{python_exe} {' '.join(argv)}"
+
         if not self.proc.waitForStarted(3000):
-            QMessageBox.critical(self, "Error", "Failed to start CLI process.")
+            QMessageBox.critical(self, "Error", f"Failed to start CLI process.\nTried: {program_display}")
             self.proc = None
             return
 

@@ -3,8 +3,6 @@
 **xPing** is a cross-platform, real-time network monitor written in Python.  
 It visualizes latency, jitter, and packet loss across multiple hosts — either as an **ASCII dashboard in your terminal** or through a **modern PyQt6 GUI**.
 
-![xPing GUI](screenshot_gui.png)
-
 ---
 
 ## Features
@@ -57,6 +55,9 @@ Run the curses-based dashboard:
 python xping.py --hosts 1.1.1.1 8.8.8.8 github.com
 ```
 
+![xPing CLI](screenshot_cli.png)
+
+
 ### CLI Options
 
 | Flag | Description |
@@ -86,13 +87,16 @@ python xping.py --hosts 1.1.1.1 8.8.8.8 --interval 1 --beep
 
 ---
 
-## 🪟 GUI Mode
+## GUI Mode
 
 Launch the graphical interface:
 
 ```bash
 python xping_gui.py
 ```
+
+![xPing GUI](screenshot_gui.png)
+
 
 ### GUI Features
 - Enter custom hosts or click **Start** to use defaults.
@@ -101,8 +105,6 @@ python xping_gui.py
 - Sort dynamically by name, RTT, loss, jitter, or average.
 - Click **Stop** to end monitoring and reveal the **Export** button.
 - Export session stats to `xping_results.txt`.
-
-![xPing CLI](screenshot_cli.png)
 
 ---
 
